@@ -264,8 +264,6 @@ def main():
     ups, downs = [], []
     for sym in TICKERS:
         df = fetch_daily_candles(sym)
-        sig_up = detect_turnup(df, min_rel_slope=0.0)     # 如需更稳，把 0.0 调成 0.0002
-        sig_dn = detect_turndown(df, min_rel_slope=0.0)  # 同上
         if sig_up:  ups.append((sym, sig_up))
         if sig_dn:  downs.append((sym, sig_dn))
         time.sleep(0.2)  # 适度节流，Stooq 没严格限速
