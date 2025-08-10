@@ -1,5 +1,8 @@
 name: Daily MA60 Scan
 
+permissions:
+  contents: write
+
 on:
   schedule:
     # 每个交易日收盘后 20:10 UTC 运行（UTC 固定；JST 次日 05:10 左右）
@@ -28,3 +31,13 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TICKERS: ${{ secrets.TICKERS }}
         run: python scan.py
+        
+      - name: Commit subscriber updates
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Update subscribers & offset [skip ci]" || true
+            git push
+          fi
