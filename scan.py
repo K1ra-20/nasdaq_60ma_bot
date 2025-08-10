@@ -14,17 +14,21 @@ OFF_FILE = Path("update_offset.txt")
 
 TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
 
-# ===== 参数区 =====
-SMA_PERIOD = 60          # 均线长度，默认60日
-WINDOW_RECENT = 15       # 最近连续上涨/下跌的天数（窗口B长度）
-WINDOW_PREV   = 60       # 往前回看起点到窗口B之间的天数（t-40 到 t-10）
-THRESHOLD_MAJ = 30       # 多数天的阈值
-MIN_REL_SLOPE = 0.0      # 最小相对斜率（去噪），0 表示不限制
+# ======== 拐点判定参数 ========
+SMA_LEN        = 60   # 均线长度
+WINDOW_RECENT  = 15   # 最近连续天数（窗口B长度）
+WINDOW_PREVEND = 60   # 窗口A结束位置（相对t）
+# 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
+WINDOW_PREV    = 35
+# 窗口A“多数”阈值（默认取过半，向上取整）
+THRESHOLD_MAJ  = (WINDOW_PREV // 2) + 1
+# 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
+MIN_REL_SLOPE  = 0.0
 
-# 以下两个是由上面计算出来的安全检查值（不用手动改）
-MIN_LEN_DATA = SMA_PERIOD + WINDOW_PREV + WINDOW_RECENT
-MIN_LEN_SLOPE = WINDOW_PREV + WINDOW_RECENT
-
+# 自动计算的检查长度
+MIN_DATA_LEN   = SMA_LEN + WINDOW_PREVEND + WINDOW_RECENT
+MIN_SLOPE_LEN  = WINDOW_PREVEND + WINDOW_RECENT
+# =============================
 
 def chunk_and_send_list(chat_id, title, items):
     """
@@ -72,84 +76,77 @@ def fetch_daily_candles(symbol):
 
 # ---------- 指标与判定 ----------
 def detect_turnup(df):
-    if df.empty or len(df) < MIN_LEN_DATA:
+    if df.empty or len(df) < MIN_DATA_LEN:
         return None
     x = df.copy()
-    x["sma"] = x["close"].rolling(SMA_PERIOD, min_periods=SMA_PERIOD).mean()
-    x["slope"] = x["sma"].diff()
+    x["sma60"] = x["close"].rolling(SMA_LEN, min_periods=SMA_LEN).mean()
+    x["slope"] = x["sma60"].diff()
 
-    if pd.isna(x.iloc[-1]["sma"]) or pd.isna(x.iloc[-2]["sma"]):
+    if pd.isna(x.iloc[-1]["sma60"]) or pd.isna(x.iloc[-2]["sma60"]):
         return None
 
     s = x["slope"].dropna()
-    if len(s) < MIN_LEN_SLOPE:
+    if len(s) < MIN_SLOPE_LEN:
         return None
 
-    # 窗口A：t-WINDOW_PREV..t-WINDOW_RECENT
-    prev_window = s.iloc[-(WINDOW_RECENT + WINDOW_PREV):-WINDOW_RECENT]
+    # 窗口A：t-WINDOW_PREVEND .. t-WINDOW_RECENT
+    prev_window = s.iloc[-WINDOW_PREVEND:-WINDOW_RECENT]
     if len(prev_window) < WINDOW_PREV:
         return None
     cond_prev_down = (prev_window <= 0).sum() >= THRESHOLD_MAJ
 
-    # 窗口B：最近 WINDOW_RECENT 天全为正
+    # 窗口B：最近连续WINDOW_RECENT天为正
     recentN = s.tail(WINDOW_RECENT)
-    if (recentN > 0).all():
-        if MIN_REL_SLOPE > 0:
-            sma_tail = x["sma"].dropna().tail(WINDOW_RECENT).values
-            rel = recentN.values / sma_tail
-            cond_recent = (rel > MIN_REL_SLOPE).all()
-        else:
-            cond_recent = True
-    else:
-        cond_recent = False
+    cond_recent = (recentN > 0).all()
+    if MIN_REL_SLOPE > 0 and cond_recent:
+        sma_tail = x["sma60"].dropna().tail(WINDOW_RECENT).values
+        rel = recentN.values / sma_tail
+        cond_recent = (rel > MIN_REL_SLOPE).all()
 
     if cond_prev_down and cond_recent:
         last = x.iloc[-1]
         return {
             "date": last["t"].date(),
             "close": float(last["close"]),
-            "sma": float(last["sma"]),
+            "sma60": float(last["sma60"]),
             "slope": float(last["slope"]),
             "type": "up",
         }
     return None
 
+
 def detect_turndown(df):
-    if df.empty or len(df) < MIN_LEN_DATA:
+    if df.empty or len(df) < MIN_DATA_LEN:
         return None
     x = df.copy()
-    x["sma"] = x["close"].rolling(SMA_PERIOD, min_periods=SMA_PERIOD).mean()
-    x["slope"] = x["sma"].diff()
+    x["sma60"] = x["close"].rolling(SMA_LEN, min_periods=SMA_LEN).mean()
+    x["slope"] = x["sma60"].diff()
 
-    if pd.isna(x.iloc[-1]["sma"]) or pd.isna(x.iloc[-2]["sma"]):
+    if pd.isna(x.iloc[-1]["sma60"]) or pd.isna(x.iloc[-2]["sma60"]):
         return None
 
     s = x["slope"].dropna()
-    if len(s) < MIN_LEN_SLOPE:
+    if len(s) < MIN_SLOPE_LEN:
         return None
 
-    prev_window = s.iloc[-(WINDOW_RECENT + WINDOW_PREV):-WINDOW_RECENT]
+    prev_window = s.iloc[-WINDOW_PREVEND:-WINDOW_RECENT]
     if len(prev_window) < WINDOW_PREV:
         return None
     cond_prev_up = (prev_window >= 0).sum() >= THRESHOLD_MAJ
 
     recentN = s.tail(WINDOW_RECENT)
-    if (recentN < 0).all():
-        if MIN_REL_SLOPE > 0:
-            sma_tail = x["sma"].dropna().tail(WINDOW_RECENT).values
-            rel = recentN.values / sma_tail
-            cond_recent = (rel < -MIN_REL_SLOPE).all()
-        else:
-            cond_recent = True
-    else:
-        cond_recent = False
+    cond_recent = (recentN < 0).all()
+    if MIN_REL_SLOPE > 0 and cond_recent:
+        sma_tail = x["sma60"].dropna().tail(WINDOW_RECENT).values
+        rel = recentN.values / sma_tail
+        cond_recent = (rel < -MIN_REL_SLOPE).all()
 
     if cond_prev_up and cond_recent:
         last = x.iloc[-1]
         return {
             "date": last["t"].date(),
             "close": float(last["close"]),
-            "sma": float(last["sma"]),
+            "sma60": float(last["sma60"]),
             "slope": float(last["slope"]),
             "type": "down",
         }
