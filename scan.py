@@ -72,6 +72,7 @@ def fetch_daily_candles(symbol):
     df = df[["t", "close"]].dropna().sort_values("t")
     if len(df) > 400:
         df = df.iloc[-400:]
+    df = df.set_index("t") 
     return df
 
 # ---------- 指标与判定 ----------
@@ -105,8 +106,9 @@ def detect_turnup(df):
 
     if cond_prev_down and cond_recent:
         last = x.iloc[-1]
+        last_date = x.index[-1].date() 
         return {
-            "date": last["t"].date(),
+            "date": last_date,
             "close": float(last["close"]),
             "sma60": float(last["sma60"]),
             "slope": float(last["slope"]),
@@ -143,8 +145,9 @@ def detect_turndown(df):
 
     if cond_prev_up and cond_recent:
         last = x.iloc[-1]
+        last_date = x.index[-1].date()   # 用索引取日期
         return {
-            "date": last["t"].date(),
+            "date": last_date,
             "close": float(last["close"]),
             "sma60": float(last["sma60"]),
             "slope": float(last["slope"]),
