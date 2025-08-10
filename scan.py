@@ -289,21 +289,17 @@ def main():
         return
 
     # 先发一个总览（数量统计）
-    for sym, s in signals:
-        text = (
-            f"📅 {s['date']}\n"
-            f"📊 今日 MA60 趋势拐点\n"
-            f"↗️ 由下跌转为上涨: {len(up_symbols)} 支\n"
-            f"↘️ 由上涨转为下跌: {len(down_symbols)} 支"
-        )
-        for cid in recipients:
-            send_message(cid, summary)
-            time.sleep(0.05)
-    
-            if up_symbols:
-                chunk_and_send_list(cid, "↗️ 上涨拐点：", sorted(up_symbols))
-            if down_symbols:
-                chunk_and_send_list(cid, "↘️ 下跌拐点：", sorted(down_symbols))
+    summary = f"📅 今日 MA60 趋势拐点\n" \
+              f"↗️ 由跌转涨: {len(up_symbols)} 支\n" \
+              f"↘️ 由涨转跌: {len(down_symbols)} 支"
+    for cid in recipients:
+        send_message(cid, summary)
+        time.sleep(0.05)
+
+        if up_symbols:
+            chunk_and_send_list(cid, "↗️ 上涨拐点：", sorted(up_symbols))
+        if down_symbols:
+            chunk_and_send_list(cid, "↘️ 下跌拐点：", sorted(down_symbols))
     
     # 如有异常标的，简要回报（不超过一条消息）
     if bad:
