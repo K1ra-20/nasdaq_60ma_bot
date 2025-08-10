@@ -1,0 +1,30 @@
+name: Daily MA60 Scan
+
+on:
+  schedule:
+    # 每个交易日收盘后 20:10 UTC 运行（UTC 固定；JST 次日 05:10 左右）
+    - cron: "10 20 * * 1-5"
+  workflow_dispatch: {}   # 允许你手动点运行
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run scan
+        env:
+          FINNHUB_TOKEN: ${{ secrets.FINNHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TICKERS: ${{ secrets.TICKERS }}
+        run: python scan.py
