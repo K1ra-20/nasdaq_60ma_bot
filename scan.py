@@ -14,6 +14,22 @@ OFF_FILE = Path("update_offset.txt")
 
 TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
 
+# ======== 拐点判定参数 ========
+SMA_LEN        = 60   # 均线长度
+WINDOW_RECENT  = 15   # 最近连续天数（窗口B长度）
+WINDOW_PREVEND = 60   # 窗口A结束位置（相对t）
+# 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
+WINDOW_PREV    = 35
+# 窗口A“多数”阈值（默认取过半，向上取整）
+THRESHOLD_MAJ  = (WINDOW_PREV // 2) + 1
+# 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
+MIN_REL_SLOPE  = 0.0
+
+# 自动计算的检查长度
+MIN_DATA_LEN   = SMA_LEN + WINDOW_PREVEND + WINDOW_RECENT
+MIN_SLOPE_LEN  = WINDOW_PREVEND + WINDOW_RECENT
+# =============================
+
 def chunk_and_send_list(chat_id, title, items):
     """
     将 items（列表/集合）按逗号+空格拼接，并在不超过 TG_MAX 的前提下分多条消息发送。
@@ -48,7 +64,7 @@ def fetch_daily_candles(symbol):
     r = requests.get(url, timeout=20, headers={"User-Agent": "ma60-telegram-bot/1.0"})
     r.raise_for_status()
     txt = r.text.strip()
-    if (not txt) or txt.lower().startswith("ticker not found"):
+    if (not txt) or "<html" in txt.lower() or txt.lower().startswith("ticker not found"):
         return pd.DataFrame()
     df = pd.read_csv(StringIO(txt))
     df.rename(columns={"Date": "t", "Close": "close"}, inplace=True)
@@ -59,47 +75,33 @@ def fetch_daily_candles(symbol):
     return df
 
 # ---------- 指标与判定 ----------
-def detect_turnup(df, min_rel_slope=0.0):
-    """
-    稳健向上拐点：
-      - 窗口 A：t-40..t-10 的 30 天里，SMA60 日斜率多数(>=16) <= 0
-      - 窗口 B：最近 10 天，SMA60 日斜率连续 > 0
-      - 可选：每一天相对斜率 > min_rel_slope（默认0）
-    返回 dict 或 None
-    """
-    if df.empty or len(df) < 135:  # 给足SMA60与窗口长度
+def detect_turnup(df):
+    if df.empty or len(df) < MIN_DATA_LEN:
         return None
     x = df.copy()
-    x["sma60"] = x["close"].rolling(60, min_periods=60).mean()
+    x["sma60"] = x["close"].rolling(SMA_LEN, min_periods=SMA_LEN).mean()
     x["slope"] = x["sma60"].diff()
 
-    # 最近一日索引
     if pd.isna(x.iloc[-1]["sma60"]) or pd.isna(x.iloc[-2]["sma60"]):
         return None
 
-    # 取出斜率序列（去掉前面 NaN）
     s = x["slope"].dropna()
-    if len(s) < 75:  # 至少能覆盖 -40..-10 与最近10天
+    if len(s) < MIN_SLOPE_LEN:
         return None
 
-    # 窗口 A：t-40..t-10 （不含今天的 10 天）
-    prev_window = s.iloc[-(15+60):-15]  # 长度应为30
-    if len(prev_window) < 45:
+    # 窗口A：t-WINDOW_PREVEND .. t-WINDOW_RECENT
+    prev_window = s.iloc[-WINDOW_PREVEND:-WINDOW_RECENT]
+    if len(prev_window) < WINDOW_PREV:
         return None
-    cond_prev_down = (prev_window <= 0).sum() >= 34
+    cond_prev_down = (prev_window <= 0).sum() >= THRESHOLD_MAJ
 
-    # 窗口 B：最近10天全为正
-    recent10 = s.tail(15)
-    if (recent10 > 0).all():
-        if min_rel_slope > 0:
-            # 每天的相对斜率都需超过阈值
-            sma_tail = x["sma60"].dropna().tail(15).values
-            rel = recent10.values / sma_tail
-            cond_recent = (rel > min_rel_slope).all()
-        else:
-            cond_recent = True
-    else:
-        cond_recent = False
+    # 窗口B：最近连续WINDOW_RECENT天为正
+    recentN = s.tail(WINDOW_RECENT)
+    cond_recent = (recentN > 0).all()
+    if MIN_REL_SLOPE > 0 and cond_recent:
+        sma_tail = x["sma60"].dropna().tail(WINDOW_RECENT).values
+        rel = recentN.values / sma_tail
+        cond_recent = (rel > MIN_REL_SLOPE).all()
 
     if cond_prev_down and cond_recent:
         last = x.iloc[-1]
@@ -113,41 +115,31 @@ def detect_turnup(df, min_rel_slope=0.0):
     return None
 
 
-def detect_turndown(df, min_rel_slope=0.0):
-    """
-    稳健向下拐点（完全反向）：
-      - 窗口 A：t-40..t-10 的 30 天里，SMA60 日斜率多数(>=16) >= 0
-      - 窗口 B：最近 10 天，SMA60 日斜率连续 < 0
-      - 可选：每一天相对斜率 < -min_rel_slope（默认0）
-    """
-    if df.empty or len(df) < 135:
+def detect_turndown(df):
+    if df.empty or len(df) < MIN_DATA_LEN:
         return None
     x = df.copy()
-    x["sma60"] = x["close"].rolling(60, min_periods=60).mean()
+    x["sma60"] = x["close"].rolling(SMA_LEN, min_periods=SMA_LEN).mean()
     x["slope"] = x["sma60"].diff()
 
     if pd.isna(x.iloc[-1]["sma60"]) or pd.isna(x.iloc[-2]["sma60"]):
         return None
 
     s = x["slope"].dropna()
-    if len(s) < 75:
+    if len(s) < MIN_SLOPE_LEN:
         return None
 
-    prev_window = s.iloc[-(15+60):-15]
-    if len(prev_window) < 45:
+    prev_window = s.iloc[-WINDOW_PREVEND:-WINDOW_RECENT]
+    if len(prev_window) < WINDOW_PREV:
         return None
-    cond_prev_up = (prev_window >= 0).sum() >= 34
+    cond_prev_up = (prev_window >= 0).sum() >= THRESHOLD_MAJ
 
-    recent10 = s.tail(15)
-    if (recent10 < 0).all():
-        if min_rel_slope > 0:
-            sma_tail = x["sma60"].dropna().tail(15).values
-            rel = recent10.values / sma_tail
-            cond_recent = (rel < -min_rel_slope).all()
-        else:
-            cond_recent = True
-    else:
-        cond_recent = False
+    recentN = s.tail(WINDOW_RECENT)
+    cond_recent = (recentN < 0).all()
+    if MIN_REL_SLOPE > 0 and cond_recent:
+        sma_tail = x["sma60"].dropna().tail(WINDOW_RECENT).values
+        rel = recentN.values / sma_tail
+        cond_recent = (rel < -MIN_REL_SLOPE).all()
 
     if cond_prev_up and cond_recent:
         last = x.iloc[-1]
@@ -159,7 +151,6 @@ def detect_turndown(df, min_rel_slope=0.0):
             "type": "down",
         }
     return None
-
 
 # ---------- Telegram 基础 ----------
 def tg_get(url_path, params=None):
@@ -270,14 +261,27 @@ def main():
             pass
 
     # 2) 扫描（同时找上涨/下跌拐点）
-    ups, downs = [], []
-    for sym in TICKERS:
+ups, downs = [], []
+bad = []
+
+for sym in TICKERS:
+    try:
         df = fetch_daily_candles(sym)
-        sig_up = detect_turnup(df, min_rel_slope=0.0)     # 如需更稳，把 0.0 调成 0.0002
-        sig_dn = detect_turndown(df, min_rel_slope=0.0)  # 同上
-        if sig_up:  ups.append((sym, sig_up))
-        if sig_dn:  downs.append((sym, sig_dn))
-        time.sleep(0.2)  # 适度节流，Stooq 没严格限速
+        sig_up = detect_turnup(df)
+        sig_dn = detect_turndown(df)
+        if sig_up: ups.append((sym, sig_up))
+        if sig_dn: downs.append((sym, sig_dn))
+    except Exception as e:
+        bad.append(f"{sym}({e})")
+    time.sleep(0.2)
+
+# 如有异常标的，简要回报（不超过一条消息）
+if bad:
+    note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:20])
+    for cid in recipients:
+        send_message(cid, note)
+        time.sleep(0.05)
+
 
     # 3) 发送（聚合成清单，只报代码）
     if not recipients:
