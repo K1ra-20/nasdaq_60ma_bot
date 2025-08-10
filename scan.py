@@ -19,9 +19,9 @@ SMA_LEN        = 60   # 均线长度
 WINDOW_RECENT  = 15   # 最近连续天数（窗口B长度）
 WINDOW_PREVEND = 60   # 窗口A结束位置（相对t）
 # 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
-WINDOW_PREV    = 35
+WINDOW_PREV    = 45
 # 窗口A“多数”阈值（默认取过半，向上取整）
-THRESHOLD_MAJ  = (WINDOW_PREV // 2) + 1
+THRESHOLD_MAJ  = 40   # (WINDOW_PREV // 2) + 1
 # 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
 MIN_REL_SLOPE  = 0.0
 
@@ -289,9 +289,10 @@ def main():
         return
 
     # 先发一个总览（数量统计）
-    summary = f"📊 今日 MA60 趋势拐点\n" \
-              f"↗️ 上涨拐点: {len(up_symbols)} 支\n" \
-              f"↘️ 下跌拐点: {len(down_symbols)} 支"
+    summary = f"📅 {s['date']}\n" \
+              f"📊 今日 MA60 趋势拐点\n" \
+              f"↗️ 由下跌转为上涨: {len(up_symbols)} 支\n" \
+              f"↘️ 由上涨转为下跌: {len(down_symbols)} 支"
     for cid in recipients:
         send_message(cid, summary)
         time.sleep(0.05)
