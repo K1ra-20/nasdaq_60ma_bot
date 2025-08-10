@@ -11,8 +11,6 @@ BASE = "https://finnhub.io/api/v1/stock/candle"
 
 # 取最近 ~200 个日K，足够计算MA60
 def fetch_daily_candles(symbol):
-    # Finnhub stock/candle: symbol, resolution=D, from, to（UNIX秒）
-    # 日线通常对拆分做调整，不对分红做现金调整；做MA60影响极小。 
     to_ts = int(datetime.now(timezone.utc).timestamp())
     frm_ts = int((datetime.now(timezone.utc) - timedelta(days=400)).timestamp())
     params = {
@@ -21,16 +19,23 @@ def fetch_daily_candles(symbol):
         "from": frm_ts,
         "to": to_ts,
         "token": FINNHUB_TOKEN,
-        "adjusted": "true",  # 一些SDK显示该参数，服务器会忽略/接受都无妨
     }
+    headers = {"User-Agent": "ma60-telegram-bot/1.0 (+github-actions)"}
+
     for attempt in range(3):
-        r = requests.get(BASE, params=params, timeout=20)
-        if r.status_code == 429:  # 速率限制，等一等
-            time.sleep(2.0)
+        r = requests.get(BASE, params=params, headers=headers, timeout=20)
+        # 速率限制
+        if r.status_code == 429:
+            time.sleep(2.5)
             continue
+        # 如果 403，给出可读提示，方便定位
+        if r.status_code == 403:
+            hint = "Finnhub 返回 403。常见原因：1) 使用了 sandbox key 但访问了正式域名；2) key 未激活/被暂停；3) 需要在请求里加 User-Agent。"
+            raise RuntimeError(f"HTTP 403 for {symbol}. {hint}")
         r.raise_for_status()
         data = r.json()
         if data.get("s") != "ok":
+            # 例如 s='no_data' 等等，返回空表即可
             return pd.DataFrame()
         df = pd.DataFrame({
             "t": pd.to_datetime(data["t"], unit="s", utc=True).tz_convert("UTC"),
@@ -38,6 +43,7 @@ def fetch_daily_candles(symbol):
         }).sort_values("t")
         return df
     return pd.DataFrame()
+
 
 def detect_turnup(df, eps=0.0005):
     if df.empty:
