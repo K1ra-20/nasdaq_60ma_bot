@@ -11,39 +11,31 @@ BASE = "https://finnhub.io/api/v1/stock/candle"
 
 # 取最近 ~200 个日K，足够计算MA60
 def fetch_daily_candles(symbol):
-    to_ts = int(datetime.now(timezone.utc).timestamp())
-    frm_ts = int((datetime.now(timezone.utc) - timedelta(days=400)).timestamp())
-    params = {
-        "symbol": symbol,
-        "resolution": "D",
-        "from": frm_ts,
-        "to": to_ts,
-        "token": FINNHUB_TOKEN,
-    }
-    headers = {"User-Agent": "ma60-telegram-bot/1.0 (+github-actions)"}
-
-    for attempt in range(3):
-        r = requests.get(BASE, params=params, headers=headers, timeout=20)
-        # 速率限制
-        if r.status_code == 429:
-            time.sleep(2.5)
-            continue
-        # 如果 403，给出可读提示，方便定位
-        if r.status_code == 403:
-            hint = "Finnhub 返回 403。常见原因：1) 使用了 sandbox key 但访问了正式域名；2) key 未激活/被暂停；3) 需要在请求里加 User-Agent。"
-            raise RuntimeError(f"HTTP 403 for {symbol}. {hint}")
-        r.raise_for_status()
-        data = r.json()
-        if data.get("s") != "ok":
-            # 例如 s='no_data' 等等，返回空表即可
-            return pd.DataFrame()
-        df = pd.DataFrame({
-            "t": pd.to_datetime(data["t"], unit="s", utc=True).tz_convert("UTC"),
-            "close": data["c"],
-        }).sort_values("t")
-        return df
-    return pd.DataFrame()
-
+    """
+    从 Stooq 拉取美股日线CSV:
+    URL 形如 https://stooq.com/q/d/l/?s=aapl.us&i=d
+    返回列：Date,Open,High,Low,Close,Volume
+    """
+    s = symbol.lower()
+    # Stooq 的美股代码需要 .us 后缀；若本身带交易所后缀就不加
+    if "." not in s:
+        s = f"{s}.us"
+    url = f"https://stooq.com/q/d/l/?s={s}&i=d"
+    r = requests.get(url, timeout=20, headers={"User-Agent": "ma60-telegram-bot/1.0"})
+    r.raise_for_status()
+    if not r.text or r.text.strip().lower().startswith("ticker not found"):
+        return pd.DataFrame()
+    # 读取 CSV
+    from io import StringIO
+    df = pd.read_csv(StringIO(r.text))
+    # 统一列名与时间
+    df.rename(columns={"Date": "t", "Close": "close"}, inplace=True)
+    df["t"] = pd.to_datetime(df["t"], utc=True)
+    df = df[["t", "close"]].dropna().sort_values("t")
+    # 只要最近 ~400 天，够算 MA60
+    if len(df) > 400:
+        df = df.iloc[-400:]
+    return df
 
 def detect_turnup(df, eps=0.0005):
     if df.empty:
