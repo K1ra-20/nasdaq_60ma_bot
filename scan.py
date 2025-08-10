@@ -261,27 +261,19 @@ def main():
             pass
 
     # 2) 扫描（同时找上涨/下跌拐点）
-ups, downs = [], []
-bad = []
-
-for sym in TICKERS:
-    try:
-        df = fetch_daily_candles(sym)
-        sig_up = detect_turnup(df)
-        sig_dn = detect_turndown(df)
-        if sig_up: ups.append((sym, sig_up))
-        if sig_dn: downs.append((sym, sig_dn))
-    except Exception as e:
-        bad.append(f"{sym}({e})")
-    time.sleep(0.2)
-
-# 如有异常标的，简要回报（不超过一条消息）
-if bad:
-    note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:20])
-    for cid in recipients:
-        send_message(cid, note)
-        time.sleep(0.05)
-
+    ups, downs = [], []
+    bad = []
+    
+    for sym in TICKERS:
+        try:
+            df = fetch_daily_candles(sym)
+            sig_up = detect_turnup(df)
+            sig_dn = detect_turndown(df)
+            if sig_up: ups.append((sym, sig_up))
+            if sig_dn: downs.append((sym, sig_dn))
+        except Exception as e:
+            bad.append(f"{sym}({e})")
+        time.sleep(0.2)
 
     # 3) 发送（聚合成清单，只报代码）
     if not recipients:
@@ -308,6 +300,13 @@ if bad:
             chunk_and_send_list(cid, "↗️ 上涨拐点：", sorted(up_symbols))
         if down_symbols:
             chunk_and_send_list(cid, "↘️ 下跌拐点：", sorted(down_symbols))
+    
+    # 如有异常标的，简要回报（不超过一条消息）
+    if bad:
+        note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:20])
+        for cid in recipients:
+            send_message(cid, note)
+            time.sleep(0.05)
 
 if __name__ == "__main__":
     try:
