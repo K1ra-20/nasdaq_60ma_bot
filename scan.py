@@ -70,7 +70,7 @@ def main():
         if sig:
             signals.append((sym, sig))
         # 节流：~1.1秒/次 ≈ 54次/分钟，低于 Finnhub 免费限额 60/分
-        time.sleep(1.1)
+        time.sleep(0.2)
 
     if not signals:
         send_message("✅ 今日无 MA60 由降转升的标的。")
