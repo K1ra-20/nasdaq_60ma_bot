@@ -12,6 +12,33 @@ TICKERS = [t.strip().upper() for t in os.environ.get("TICKERS","AAPL,MSFT,GOOG")
 SUB_FILE = Path("subscribers.json")
 OFF_FILE = Path("update_offset.txt")
 
+TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
+
+def chunk_and_send_list(chat_id, title, items):
+    """
+    将 items（列表/集合）按逗号+空格拼接，并在不超过 TG_MAX 的前提下分多条消息发送。
+    """
+    if not items:
+        return
+    head = title.strip()
+    line = ""
+    for sym in items:
+        piece = (", " if line else "") + sym
+        # 如果再加就会超长，先发一条
+        if len(head) + 1 + len(line) + len(piece) > TG_MAX:
+            text = f"{head}\n{line}"
+            send_message(chat_id, text)
+            time.sleep(0.05)
+            line = sym  # 新的一段以当前 symbol 开头
+        else:
+            line += piece
+    # 发送剩余部分
+    if line:
+        text = f"{head}\n{line}"
+        send_message(chat_id, text)
+        time.sleep(0.05)
+
+
 # ---------- 数据抓取：Stooq EOD ----------
 def fetch_daily_candles(symbol):
     s = symbol.lower()
@@ -32,24 +59,107 @@ def fetch_daily_candles(symbol):
     return df
 
 # ---------- 指标与判定 ----------
-def detect_turnup(df, eps=0.0005):
-    if df.empty:
+def detect_turnup(df, min_rel_slope=0.0):
+    """
+    稳健向上拐点：
+      - 窗口 A：t-40..t-10 的 30 天里，SMA60 日斜率多数(>=16) <= 0
+      - 窗口 B：最近 10 天，SMA60 日斜率连续 > 0
+      - 可选：每一天相对斜率 > min_rel_slope（默认0）
+    返回 dict 或 None
+    """
+    if df.empty or len(df) < 110:  # 给足SMA60与窗口长度
         return None
-    df = df.copy()
-    df["sma60"] = df["close"].rolling(60, min_periods=60).mean()
-    df["slope"] = df["sma60"].diff()
-    if len(df) < 61 or pd.isna(df.iloc[-1]["sma60"]) or pd.isna(df.iloc[-2]["sma60"]):
+    x = df.copy()
+    x["sma60"] = x["close"].rolling(60, min_periods=60).mean()
+    x["slope"] = x["sma60"].diff()
+
+    # 最近一日索引
+    if pd.isna(x.iloc[-1]["sma60"]) or pd.isna(x.iloc[-2]["sma60"]):
         return None
-    row_t  = df.iloc[-1]
-    row_t1 = df.iloc[-2]
-    if (row_t1["slope"] <= 0) and (row_t["slope"] > 0) and (row_t["slope"]/row_t["sma60"] > eps):
+
+    # 取出斜率序列（去掉前面 NaN）
+    s = x["slope"].dropna()
+    if len(s) < 50:  # 至少能覆盖 -40..-10 与最近10天
+        return None
+
+    # 窗口 A：t-40..t-10 （不含今天的 10 天）
+    prev_window = s.iloc[-(10+40):-10]  # 长度应为30
+    if len(prev_window) < 30:
+        return None
+    cond_prev_down = (prev_window <= 0).sum() >= 16
+
+    # 窗口 B：最近10天全为正
+    recent10 = s.tail(10)
+    if (recent10 > 0).all():
+        if min_rel_slope > 0:
+            # 每天的相对斜率都需超过阈值
+            sma_tail = x["sma60"].dropna().tail(10).values
+            rel = recent10.values / sma_tail
+            cond_recent = (rel > min_rel_slope).all()
+        else:
+            cond_recent = True
+    else:
+        cond_recent = False
+
+    if cond_prev_down and cond_recent:
+        last = x.iloc[-1]
         return {
-            "date": row_t["t"].date(),
-            "close": float(row_t["close"]),
-            "sma60": float(row_t["sma60"]),
-            "slope": float(row_t["slope"]),
+            "date": last["t"].date(),
+            "close": float(last["close"]),
+            "sma60": float(last["sma60"]),
+            "slope": float(last["slope"]),
+            "type": "up",
         }
     return None
+
+
+def detect_turndown(df, min_rel_slope=0.0):
+    """
+    稳健向下拐点（完全反向）：
+      - 窗口 A：t-40..t-10 的 30 天里，SMA60 日斜率多数(>=16) >= 0
+      - 窗口 B：最近 10 天，SMA60 日斜率连续 < 0
+      - 可选：每一天相对斜率 < -min_rel_slope（默认0）
+    """
+    if df.empty or len(df) < 110:
+        return None
+    x = df.copy()
+    x["sma60"] = x["close"].rolling(60, min_periods=60).mean()
+    x["slope"] = x["sma60"].diff()
+
+    if pd.isna(x.iloc[-1]["sma60"]) or pd.isna(x.iloc[-2]["sma60"]):
+        return None
+
+    s = x["slope"].dropna()
+    if len(s) < 50:
+        return None
+
+    prev_window = s.iloc[-(10+40):-10]
+    if len(prev_window) < 30:
+        return None
+    cond_prev_up = (prev_window >= 0).sum() >= 16
+
+    recent10 = s.tail(10)
+    if (recent10 < 0).all():
+        if min_rel_slope > 0:
+            sma_tail = x["sma60"].dropna().tail(10).values
+            rel = recent10.values / sma_tail
+            cond_recent = (rel < -min_rel_slope).all()
+        else:
+            cond_recent = True
+    else:
+        cond_recent = False
+
+    if cond_prev_up and cond_recent:
+        last = x.iloc[-1]
+        return {
+            "date": last["t"].date(),
+            "close": float(last["close"]),
+            "sma60": float(last["sma60"]),
+            "slope": float(last["slope"]),
+            "type": "down",
+        }
+    return None
+
 
 # ---------- Telegram 基础 ----------
 def tg_get(url_path, params=None):
@@ -159,36 +269,41 @@ def main():
         except Exception:
             pass
 
-    # 2) 扫描
-    signals = []
+    # 2) 扫描（同时找上涨/下跌拐点）
+    ups, downs = [], []
     for sym in TICKERS:
         df = fetch_daily_candles(sym)
-        sig = detect_turnup(df)
-        if sig:
-            signals.append((sym, sig))
+        sig_up = detect_turnup(df, min_rel_slope=0.0)     # 如需更稳，把 0.0 调成 0.0002
+        sig_dn = detect_turndown(df, min_rel_slope=0.0)  # 同上
+        if sig_up:  ups.append((sym, sig_up))
+        if sig_dn:  downs.append((sym, sig_dn))
         time.sleep(0.2)  # 适度节流，Stooq 没严格限速
 
-    # 3) 发送
+    # 3) 发送（聚合成清单，只报代码）
     if not recipients:
-        # 没有任何可发对象就算了（避免报错）
         return
 
-    if not signals:
+    up_symbols   = [sym for sym, _ in ups]
+    down_symbols = [sym for sym, _ in downs]
+
+    if not up_symbols and not down_symbols:
         for cid in recipients:
-            send_message(cid, "✅ 今日无 MA60 由降转升的标的。")
+            send_message(cid, "✅ 今日无 MA60 趋势拐点（上涨/下跌）。")
             time.sleep(0.05)
         return
 
-    for sym, s in signals:
-        text = (
-            f"📈 {sym} MA60 由降转升\n"
-            f"日期: {s['date']}\n"
-            f"收盘: {s['close']:.2f}  SMA60: {s['sma60']:.2f}  Δ:{s['slope']:.4f}\n"
-            f"图表: https://www.tradingview.com/symbols/{sym}/"
-        )
-        for cid in recipients:
-            send_message(cid, text)
-            time.sleep(0.05)
+    # 先发一个总览（数量统计）
+    summary = f"📊 今日 MA60 趋势拐点\n" \
+              f"↗️ 上涨拐点: {len(up_symbols)} 支\n" \
+              f"↘️ 下跌拐点: {len(down_symbols)} 支"
+    for cid in recipients:
+        send_message(cid, summary)
+        time.sleep(0.05)
+
+        if up_symbols:
+            chunk_and_send_list(cid, "↗️ 上涨拐点：", sorted(up_symbols))
+        if down_symbols:
+            chunk_and_send_list(cid, "↘️ 下跌拐点：", sorted(down_symbols))
 
 if __name__ == "__main__":
     try:
