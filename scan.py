@@ -17,9 +17,9 @@ TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
 # ======== 拐点判定参数 ========
 SMA_LEN        = 60   # 均线长度（别改）
 WINDOW_RECENT  = 15   # 最近连续天数（窗口B长度）
-WINDOW_PREVEND = 60   # 窗口A结束位置（相对t）
+WINDOW_PREVEND = 65   # 窗口A结束位置（相对t）
 # 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
-WINDOW_PREV    = 45
+WINDOW_PREV    = 40
 # 窗口A“多数”阈值（默认取过半，向上取整）
 THRESHOLD_MAJ  = 35   # (WINDOW_PREV // 2) + 1
 # 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
@@ -289,9 +289,9 @@ def main():
         return
 
     # 先发一个总览（数量统计）
-    summary = f"📅 今日 MA60 趋势拐点\n" \
-              f"↗️ 由跌转涨: {len(up_symbols)} 支\n" \
-              f"↘️ 由涨转跌: {len(down_symbols)} 支"
+    summary = f"🎊 今日 MA60 趋势拐点\n" \
+              f"📈 由跌转涨: {len(up_symbols)} 支\n" \
+              f"📉 由涨转跌: {len(down_symbols)} 支"
     for cid in recipients:
         send_message(cid, summary)
         time.sleep(0.05)
