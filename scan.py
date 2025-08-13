@@ -8,10 +8,10 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 # 个人兜底 Chat（没有任何群订阅时就发到你个人，便于确认系统OK）
 FALLBACK_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 TICKERS = [t.strip().upper() for t in os.environ.get("TICKERS","AAPL,MSFT,GOOG").split(",") if t.strip()]
-
+STATE_UP = Path("last_ups.json")
+STATE_DN = Path("last_downs.json")
 SUB_FILE = Path("subscribers.json")
 OFF_FILE = Path("update_offset.txt")
-LAST_FILE = Path("last_signals.json")
 
 TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
 
@@ -20,9 +20,9 @@ SMA_LEN        = 60   # 均线长度（别改）
 WINDOW_RECENT  = 15   # 最近连续天数（窗口B长度）
 WINDOW_PREVEND = 100   # 窗口A结束位置（相对t）
 # 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
-WINDOW_PREV    = 78
+WINDOW_PREV    = 75
 # 窗口A“多数”阈值（默认取过半，向上取整）
-THRESHOLD_MAJ  = 75   # (WINDOW_PREV // 2) + 1
+THRESHOLD_MAJ  = 72   # (WINDOW_PREV // 2) + 1
 # 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
 MIN_REL_SLOPE  = 0.0
 
@@ -31,44 +31,36 @@ MIN_DATA_LEN   = SMA_LEN + WINDOW_PREVEND + WINDOW_RECENT
 MIN_SLOPE_LEN  = WINDOW_PREVEND + WINDOW_RECENT
 # =============================
 
-def load_last_signals():
-    """读取昨天播报过的代码集合（上下拐点各一组）。"""
-    if not LAST_FILE.exists():
-        return set(), set()
+def load_set(p: Path) -> set:
     try:
-        data = json.loads(LAST_FILE.read_text().strip() or "{}")
-        up = set(data.get("ups", []))
-        dn = set(data.get("downs", []))
-        return up, dn
+        if p.exists():
+            import json
+            return set(json.loads(p.read_text().strip() or "[]"))
     except Exception:
-        return set(), set()
+        pass
+    return set()
 
-def save_last_signals(up_set:set, dn_set:set):
-    """把今天播报过的集合保存下来，供明天对比。"""
-    data = {"ups": sorted(up_set), "downs": sorted(dn_set)}
-    LAST_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=0))
+def save_set(p: Path, s: set):
+    import json
+    p.write_text(json.dumps(sorted(s)))
     
-def chunk_and_send_list(chat_id, title, items, highlight:set=None):
-    """
-    将 items 按逗号分隔拼接并分段发送。
-    highlight: 需要加粗的代码集合（例如今天的新出现的）。
-    """
-    highlight = highlight or set()
+def chunk_and_send_list_md(chat_id, title, items, new_items: set):
+    """将 items（list）按长度分段发送；出现在 new_items 的元素用 **加粗**。"""
     if not items:
         return
     head = title.strip()
     line = ""
     for sym in items:
-        label = f"**{sym}**" if sym in highlight else sym
-        piece = (", " if line else "") + label
+        token = f"**{sym}**" if sym in new_items else sym
+        piece = (", " if line else "") + token
         if len(head) + 1 + len(line) + len(piece) > TG_MAX:
-            send_message(chat_id, f"{head}\n{line}")
+            send_message(chat_id, f"{head}\n{line}", markdown=True)
             time.sleep(0.05)
-            line = label
+            line = token
         else:
             line += piece
     if line:
-        send_message(chat_id, f"{head}\n{line}")
+        send_message(chat_id, f"{head}\n{line}", markdown=True)
         time.sleep(0.05)
 
 
@@ -176,10 +168,13 @@ def tg_get(url_path, params=None):
     r.raise_for_status()
     return r.json()
 
-def send_message(chat_id, text):
+def send_message(chat_id, text, markdown=False):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+    if markdown:
+        payload["parse_mode"] = "Markdown"  # 用 * 和 ** 语法
     requests.post(url, json=payload, timeout=20)
+
 
 # ---------- 订阅管理：从 getUpdates 自动同步 ----------
 def load_subscribers():
@@ -292,47 +287,60 @@ def main():
             bad.append(f"{sym}({e})")
         time.sleep(0.2)
 
-    # 3) 生成并发送（聚合清单 + 新增加粗）
+    # 3) 发送结果（聚合清单 + 新增加粗）
     if not recipients:
         return
 
-    up_symbols   = sorted(ups)    # ups/downs 在你前面的循环里已经收集为纯代码列表
-    down_symbols = sorted(downs)
+    # 今天的列表
+    up_syms   = sorted(ups)    # 你的 ups/downs 现在是符号列表（上一版我们已这么做）
+    down_syms = sorted(downs)
 
-    # 读取昨天
-    prev_up, prev_dn = load_last_signals()
-    # 计算今天“新增”的（出现在今天，但昨天没有）
-    new_up = set(up_symbols) - prev_up
-    new_dn = set(down_symbols) - prev_dn
+    # 载入昨天的集合
+    prev_up   = load_set(STATE_UP)
+    prev_down = load_set(STATE_DN)
 
-    if not up_symbols and not down_symbols:
+    # 计算“新增”
+    new_up   = set(up_syms)   - prev_up
+    new_down = set(down_syms) - prev_down
+
+    if not up_syms and not down_syms:
         for cid in recipients:
             send_message(cid, "✅ 今日无 MA60 趋势拐点（上涨/下跌）。")
             time.sleep(0.05)
     else:
         summary = (
             "🎊 今日 MA60 趋势拐点\n"
-            f"📈 由跌转涨: {len(up_symbols)} 支 ✨新增 {len(new_up)} \n"
-            f"📉 下跌拐点: {len(down_symbols)} 支 ✨新增 {len(new_dn)} \n"
-            "------------"
+            f"📈 由跌转涨: {len(up_syms)} 支 ✨新增 {len(new_up)} \n"
+            f"📉 由涨转跌: {len(down_syms)} 支 ✨新增 {len(new_down)} "
         )
         for cid in recipients:
             send_message(cid, summary)
             time.sleep(0.05)
-            if up_symbols:
-                chunk_and_send_list(cid, "↗️ 上涨拐点：", up_symbols, highlight=new_up)
-            if down_symbols:
-                chunk_and_send_list(cid, "↘️ 下跌拐点：", down_symbols, highlight=new_dn)
+            if up_syms:
+                chunk_and_send_list_md(
+                    cid,
+                    "↗️ 上涨拐点：",
+                    up_syms,
+                    new_up
+                )
+            if down_syms:
+                chunk_and_send_list_md(
+                    cid,
+                    "↘️ 下跌拐点：",
+                    down_syms,
+                    new_down
+                )
 
-    # 4) 如有异常标的，简要汇报（不阻断主流程）
+    # 4) 报告异常标的（可选）
     if bad:
         note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:50])
         for cid in recipients:
             send_message(cid, note)
             time.sleep(0.05)
 
-    # 5) 保存“今天的集合”，供明天对比
-    save_last_signals(set(up_symbols), set(down_symbols))
+    # 5) 保存“今天”的结果，供明日对比
+    save_set(STATE_UP, set(up_syms))
+    save_set(STATE_DN, set(down_syms))
 
 
 if __name__ == "__main__":
