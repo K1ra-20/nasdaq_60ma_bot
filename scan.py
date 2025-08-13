@@ -11,17 +11,18 @@ TICKERS = [t.strip().upper() for t in os.environ.get("TICKERS","AAPL,MSFT,GOOG")
 
 SUB_FILE = Path("subscribers.json")
 OFF_FILE = Path("update_offset.txt")
+LAST_FILE = Path("last_signals.json")
 
 TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
 
 # ======== 拐点判定参数 ========
 SMA_LEN        = 60   # 均线长度（别改）
 WINDOW_RECENT  = 15   # 最近连续天数（窗口B长度）
-WINDOW_PREVEND = 65   # 窗口A结束位置（相对t）
+WINDOW_PREVEND = 100   # 窗口A结束位置（相对t）
 # 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
-WINDOW_PREV    = 40
+WINDOW_PREV    = 78
 # 窗口A“多数”阈值（默认取过半，向上取整）
-THRESHOLD_MAJ  = 35   # (WINDOW_PREV // 2) + 1
+THRESHOLD_MAJ  = 75   # (WINDOW_PREV // 2) + 1
 # 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
 MIN_REL_SLOPE  = 0.0
 
@@ -30,28 +31,44 @@ MIN_DATA_LEN   = SMA_LEN + WINDOW_PREVEND + WINDOW_RECENT
 MIN_SLOPE_LEN  = WINDOW_PREVEND + WINDOW_RECENT
 # =============================
 
-def chunk_and_send_list(chat_id, title, items):
+def load_last_signals():
+    """读取昨天播报过的代码集合（上下拐点各一组）。"""
+    if not LAST_FILE.exists():
+        return set(), set()
+    try:
+        data = json.loads(LAST_FILE.read_text().strip() or "{}")
+        up = set(data.get("ups", []))
+        dn = set(data.get("downs", []))
+        return up, dn
+    except Exception:
+        return set(), set()
+
+def save_last_signals(up_set:set, dn_set:set):
+    """把今天播报过的集合保存下来，供明天对比。"""
+    data = {"ups": sorted(up_set), "downs": sorted(dn_set)}
+    LAST_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=0))
+    
+def chunk_and_send_list(chat_id, title, items, highlight:set=None):
     """
-    将 items（列表/集合）按逗号+空格拼接，并在不超过 TG_MAX 的前提下分多条消息发送。
+    将 items 按逗号分隔拼接并分段发送。
+    highlight: 需要加粗的代码集合（例如今天的新出现的）。
     """
+    highlight = highlight or set()
     if not items:
         return
     head = title.strip()
     line = ""
     for sym in items:
-        piece = (", " if line else "") + sym
-        # 如果再加就会超长，先发一条
+        label = f"**{sym}**" if sym in highlight else sym
+        piece = (", " if line else "") + label
         if len(head) + 1 + len(line) + len(piece) > TG_MAX:
-            text = f"{head}\n{line}"
-            send_message(chat_id, text)
+            send_message(chat_id, f"{head}\n{line}")
             time.sleep(0.05)
-            line = sym  # 新的一段以当前 symbol 开头
+            line = label
         else:
             line += piece
-    # 发送剩余部分
     if line:
-        text = f"{head}\n{line}"
-        send_message(chat_id, text)
+        send_message(chat_id, f"{head}\n{line}")
         time.sleep(0.05)
 
 
@@ -275,38 +292,48 @@ def main():
             bad.append(f"{sym}({e})")
         time.sleep(0.2)
 
-    # 3) 发送（聚合成清单，只报代码）
+    # 3) 生成并发送（聚合清单 + 新增加粗）
     if not recipients:
         return
 
-    up_symbols   = [sym for sym, _ in ups]
-    down_symbols = [sym for sym, _ in downs]
+    up_symbols   = sorted(ups)    # ups/downs 在你前面的循环里已经收集为纯代码列表
+    down_symbols = sorted(downs)
+
+    # 读取昨天
+    prev_up, prev_dn = load_last_signals()
+    # 计算今天“新增”的（出现在今天，但昨天没有）
+    new_up = set(up_symbols) - prev_up
+    new_dn = set(down_symbols) - prev_dn
 
     if not up_symbols and not down_symbols:
         for cid in recipients:
             send_message(cid, "✅ 今日无 MA60 趋势拐点（上涨/下跌）。")
             time.sleep(0.05)
-        return
+    else:
+        summary = (
+            "🎊 今日 MA60 趋势拐点\n"
+            f"📈 由跌转涨: {len(up_symbols)} 支 ✨新增 {len(new_up)} \n"
+            f"📉 下跌拐点: {len(down_symbols)} 支 ✨新增 {len(new_dn)} \n"
+            "------------"
+        )
+        for cid in recipients:
+            send_message(cid, summary)
+            time.sleep(0.05)
+            if up_symbols:
+                chunk_and_send_list(cid, "↗️ 上涨拐点：", up_symbols, highlight=new_up)
+            if down_symbols:
+                chunk_and_send_list(cid, "↘️ 下跌拐点：", down_symbols, highlight=new_dn)
 
-    # 先发一个总览（数量统计）
-    summary = f"🎊 今日 MA60 趋势拐点\n" \
-              f"📈 由跌转涨: {len(up_symbols)} 支\n" \
-              f"📉 由涨转跌: {len(down_symbols)} 支"
-    for cid in recipients:
-        send_message(cid, summary)
-        time.sleep(0.05)
-
-        if up_symbols:
-            chunk_and_send_list(cid, "↗️ 上涨拐点：", sorted(up_symbols))
-        if down_symbols:
-            chunk_and_send_list(cid, "↘️ 下跌拐点：", sorted(down_symbols))
-    
-    # 如有异常标的，简要回报（不超过一条消息）
+    # 4) 如有异常标的，简要汇报（不阻断主流程）
     if bad:
-        note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:20])
+        note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:50])
         for cid in recipients:
             send_message(cid, note)
             time.sleep(0.05)
+
+    # 5) 保存“今天的集合”，供明天对比
+    save_last_signals(set(up_symbols), set(down_symbols))
+
 
 if __name__ == "__main__":
     try:
