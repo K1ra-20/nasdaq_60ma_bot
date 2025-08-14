@@ -8,10 +8,10 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 # 个人兜底 Chat（没有任何群订阅时就发到你个人，便于确认系统OK）
 FALLBACK_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 TICKERS = [t.strip().upper() for t in os.environ.get("TICKERS","AAPL,MSFT,GOOG").split(",") if t.strip()]
-STATE_UP = Path("last_ups.json")
-STATE_DN = Path("last_downs.json")
+
 SUB_FILE = Path("subscribers.json")
 OFF_FILE = Path("update_offset.txt")
+LAST_FILE = Path("last_signals.json")
 
 TG_MAX = 4000  # 给标题/空行留点余量，实际上限约 4096
 
@@ -22,7 +22,7 @@ WINDOW_PREVEND = 100   # 窗口A结束位置（相对t）
 # 窗口A长度 = WINDOW_PREVEND - WINDOW_RECENT
 WINDOW_PREV    = 75
 # 窗口A“多数”阈值（默认取过半，向上取整）
-THRESHOLD_MAJ  = 72   # (WINDOW_PREV // 2) + 1
+THRESHOLD_MAJ  = 73   # (WINDOW_PREV // 2) + 1
 # 相对斜率最小幅度（去噪用，0表示不限制；0.0005≈0.05%）
 MIN_REL_SLOPE  = 0.0
 
@@ -30,37 +30,71 @@ MIN_REL_SLOPE  = 0.0
 MIN_DATA_LEN   = SMA_LEN + WINDOW_PREVEND + WINDOW_RECENT
 MIN_SLOPE_LEN  = WINDOW_PREVEND + WINDOW_RECENT
 # =============================
+def _extract_symbol(x):
+    """从多种历史形态里提取股票代码为字符串。支持 str / (sym, ...) / dict"""
+    if isinstance(x, str):
+        return x.strip().upper()
+    if isinstance(x, (list, tuple)) and len(x) >= 1:
+        return str(x[0]).strip().upper()
+    if isinstance(x, dict):
+        for k in ("symbol", "sym", "ticker"):
+            if k in x and x[k]:
+                return str(x[k]).strip().upper()
+    return None
 
-def load_set(p: Path) -> set:
+def only_symbols(items):
+    """把列表里的元素统一转换成纯股票代码字符串列表，过滤掉 None。"""
+    out = []
+    for it in items:
+        sym = _extract_symbol(it)
+        if sym:
+            out.append(sym)
+    return out
+
+def load_last_signals():
+    """读取昨天播报过的代码集合（上下拐点各一组），并做兼容清洗。"""
+    if not LAST_FILE.exists():
+        return set(), set()
     try:
-        if p.exists():
-            import json
-            return set(json.loads(p.read_text().strip() or "[]"))
+        raw = LAST_FILE.read_text().strip() or "{}"
+        data = json.loads(raw)
+        up_raw = data.get("ups", [])
+        dn_raw = data.get("downs", [])
+        up = set(only_symbols(up_raw))
+        dn = set(only_symbols(dn_raw))
+        return up, dn
     except Exception:
-        pass
-    return set()
+        return set(), set()
 
-def save_set(p: Path, s: set):
-    import json
-    p.write_text(json.dumps(sorted(s)))
+def save_last_signals(up_set: set, dn_set: set):
+    """只保存字符串代码，避免下次读到 dict/tuple。"""
+    data = {
+        "ups": sorted([_extract_symbol(x) for x in up_set if _extract_symbol(x)]),
+        "downs": sorted([_extract_symbol(x) for x in dn_set if _extract_symbol(x)]),
+    }
+    LAST_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=0))
     
-def chunk_and_send_list_md(chat_id, title, items, new_items: set):
-    """将 items（list）按长度分段发送；出现在 new_items 的元素用 **加粗**。"""
+def chunk_and_send_list(chat_id, title, items, highlight:set=None):
+    """
+    将 items 按逗号分隔拼接并分段发送。
+    highlight: 需要加粗的代码集合（例如今天的新出现的）。
+    """
+    highlight = highlight or set()
     if not items:
         return
     head = title.strip()
     line = ""
     for sym in items:
-        token = f"**{sym}**" if sym in new_items else sym
-        piece = (", " if line else "") + token
+        label = f"**{sym}**" if sym in highlight else sym
+        piece = (", " if line else "") + label
         if len(head) + 1 + len(line) + len(piece) > TG_MAX:
-            send_message(chat_id, f"{head}\n{line}", markdown=True)
+            send_message(chat_id, f"{head}\n{line}")
             time.sleep(0.05)
-            line = token
+            line = label
         else:
             line += piece
     if line:
-        send_message(chat_id, f"{head}\n{line}", markdown=True)
+        send_message(chat_id, f"{head}\n{line}")
         time.sleep(0.05)
 
 
@@ -168,13 +202,15 @@ def tg_get(url_path, params=None):
     r.raise_for_status()
     return r.json()
 
-def send_message(chat_id, text, markdown=False):
+def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
-    if markdown:
-        payload["parse_mode"] = "Markdown"  # 用 * 和 ** 语法
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+        "parse_mode": "Markdown",  # 让 **粗体** 生效（用经典 Markdown，免去V2的转义麻烦）
+    }
     requests.post(url, json=payload, timeout=20)
-
 
 # ---------- 订阅管理：从 getUpdates 自动同步 ----------
 def load_subscribers():
@@ -287,60 +323,46 @@ def main():
             bad.append(f"{sym}({e})")
         time.sleep(0.2)
 
-    # 3) 发送结果（聚合清单 + 新增加粗）
+    # 3) 生成并发送（聚合清单 + 新增加粗）
     if not recipients:
         return
 
-    # 今天的列表
-    up_syms   = sorted(ups)    # 你的 ups/downs 现在是符号列表（上一版我们已这么做）
-    down_syms = sorted(downs)
+    # ups / downs 上面循环里建议直接 append(sym)
+    up_symbols   = sorted(only_symbols(ups))
+    down_symbols = sorted(only_symbols(downs))
 
-    # 载入昨天的集合
-    prev_up   = load_set(STATE_UP)
-    prev_down = load_set(STATE_DN)
+    prev_up, prev_dn = load_last_signals()
+    new_up = set(up_symbols) - prev_up
+    new_dn = set(down_symbols) - prev_dn
 
-    # 计算“新增”
-    new_up   = set(up_syms)   - prev_up
-    new_down = set(down_syms) - prev_down
-
-    if not up_syms and not down_syms:
+    if not up_symbols and not down_symbols:
         for cid in recipients:
             send_message(cid, "✅ 今日无 MA60 趋势拐点（上涨/下跌）。")
             time.sleep(0.05)
     else:
         summary = (
             "🎊 今日 MA60 趋势拐点\n"
-            f"📈 由跌转涨: {len(up_syms)} 支 ✨新增 {len(new_up)} \n"
-            f"📉 由涨转跌: {len(down_syms)} 支 ✨新增 {len(new_down)} "
+            f"📈 由跌转涨: {len(up_symbols)} 支 ✨新增 {len(new_up)} \n"
+            f"📉 下跌拐点: {len(down_symbols)} 支 ✨新增 {len(new_dn)} \n"
+            "------------"
         )
         for cid in recipients:
             send_message(cid, summary)
             time.sleep(0.05)
-            if up_syms:
-                chunk_and_send_list_md(
-                    cid,
-                    "↗️ 上涨拐点：",
-                    up_syms,
-                    new_up
-                )
-            if down_syms:
-                chunk_and_send_list_md(
-                    cid,
-                    "↘️ 下跌拐点：",
-                    down_syms,
-                    new_down
-                )
+            if up_symbols:
+                chunk_and_send_list(cid, "↗️ 上涨拐点：", up_symbols, highlight=new_up)
+            if down_symbols:
+                chunk_and_send_list(cid, "↘️ 下跌拐点：", down_symbols, highlight=new_dn)
 
-    # 4) 报告异常标的（可选）
+    # 4) 如有异常标的，简要汇报（不阻断主流程）
     if bad:
         note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:50])
         for cid in recipients:
             send_message(cid, note)
             time.sleep(0.05)
 
-    # 5) 保存“今天”的结果，供明日对比
-    save_set(STATE_UP, set(up_syms))
-    save_set(STATE_DN, set(down_syms))
+    # 5) 保存“今天的集合”，供明天对比
+    save_last_signals(set(up_symbols), set(down_symbols))
 
 
 if __name__ == "__main__":
