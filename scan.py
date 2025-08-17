@@ -8,6 +8,7 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 # 个人兜底 Chat（没有任何群订阅时就发到你个人，便于确认系统OK）
 FALLBACK_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 TICKERS = [t.strip().upper() for t in os.environ.get("TICKERS","AAPL,MSFT,GOOG").split(",") if t.strip()]
+USE_SP500 = os.environ.get("USE_SP500", "true").lower() == "true" # 开关：是否使用自定义股票清单
 
 SUB_FILE = Path("subscribers.json")
 OFF_FILE = Path("update_offset.txt")
@@ -30,6 +31,58 @@ MIN_REL_SLOPE  = 0.0
 MIN_DATA_LEN   = SMA_LEN + WINDOW_PREVEND + WINDOW_RECENT
 MIN_SLOPE_LEN  = WINDOW_PREVEND + WINDOW_RECENT
 # =============================
+def fetch_sp500_tickers():
+    """
+    动态抓取 S&P 500 成分股代码（Symbol 列），返回大写的去重列表。
+    - 首选：维基百科“List of S&P 500 companies”页面的第一张表
+    - 备用：NASDAQ 的成分页（若维基失败）
+    - 失败时：返回空列表（主流程会提示）
+    """
+    headers = {"User-Agent": "ma60-telegram-bot/1.0 (+github-actions)"}
+
+    # 1) 维基百科
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        html = requests.get(url, timeout=30, headers=headers).text
+        tables = pd.read_html(html)  # 需要 lxml
+        # 通常第一张表就是 constituents
+        for tbl in tables:
+            cols = [c.lower() for c in tbl.columns]
+            if any("symbol" in c for c in cols):
+                symcol = tbl.columns[[i for i,c in enumerate(cols) if "symbol" in c][0]]
+                syms = (
+                    tbl[symcol]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    .tolist()
+                )
+                # 清理特殊符号（去掉空、非字母数字/点/破折号）
+                cleaned = []
+                for s in syms:
+                    s = s.replace("\u200b", "").replace(" ", "")
+                    if s and all(ch.isalnum() or ch in {".", "-"} for ch in s):
+                        cleaned.append(s)
+                if cleaned:
+                    return sorted(set(cleaned))
+    except Exception:
+        pass
+
+    # 2) 备用来源（NASDAQ 指数成分接口/页面常有反爬；这里留作兜底示例）
+    try:
+        url = "https://www.nasdaq.com/market-activity/quotes/s-and-p-500"
+        html = requests.get(url, timeout=30, headers=headers).text
+        # 有站点防爬时这里可能拿不到完整列表；简单正则兜底
+        import re
+        guess = re.findall(r'"/market-activity/stocks/([A-Za-z0-9\.-]{1,10})"', html)
+        if guess:
+            syms = [g.upper() for g in guess]
+            return sorted(set(syms))
+    except Exception:
+        pass
+
+    return []
+
 def _extract_symbol(x):
     """从多种历史形态里提取股票代码为字符串。支持 str / (sym, ...) / dict"""
     if isinstance(x, str):
@@ -99,22 +152,35 @@ def chunk_and_send_list(chat_id, title, items, highlight:set=None):
 
 
 # ---------- 数据抓取：Stooq EOD ----------
-def fetch_daily_candles(symbol):
-    s = symbol.lower()
+def _to_stooq_symbol(symbol: str) -> str:
+    """
+    把标准美股代码转成 Stooq 查询用代码：
+    - 小写
+    - 默认追加 '.us' 后缀
+    - 保留点号（BRK.B, BF.B 等）
+    """
+    s = (symbol or "").strip().lower()
+    # 常见：stooq 支持 'brk.b.us' 这种写法；不替换成破折号，保留点号更稳
     if "." not in s:
-        s = f"{s}.us"   # 美股后缀
-    url = f"https://stooq.com/q/d/l/?s={s}&i=d"
+        s = f"{s}.us"
+    elif not s.endswith(".us"):
+        s = f"{s}.us"
+    return s
+
+def fetch_daily_candles(symbol):
+    stooq_sym = _to_stooq_symbol(symbol)
+    url = f"https://stooq.com/q/d/l/?s={stooq_sym}&i=d"
     r = requests.get(url, timeout=20, headers={"User-Agent": "ma60-telegram-bot/1.0"})
-    r.raise_for_status()
     txt = r.text.strip()
     if (not txt) or "<html" in txt.lower() or txt.lower().startswith("ticker not found"):
         return pd.DataFrame()
     df = pd.read_csv(StringIO(txt))
     df.rename(columns={"Date": "t", "Close": "close"}, inplace=True)
-    df["t"] = pd.to_datetime(df["t"], utc=True)
+    df["t"] = pd.to_datetime(df["t"], utc=True, errors="coerce")
     df = df[["t", "close"]].dropna().sort_values("t")
     if len(df) > 400:
         df = df.iloc[-400:]
+    df = df.set_index("t")
     return df
 
 # ---------- 指标与判定 ----------
@@ -297,6 +363,16 @@ def sync_subscribers_from_updates():
 
 # ---------- 主流程 ----------
 def main():
+    # 0) 如果开启 S&P 500 模式，动态拉取成分股作为 TICKERS
+    global TICKERS
+    if USE_SP500:
+        sp = fetch_sp500_tickers()
+        if sp:
+            TICKERS = sp
+        else:
+            # 拉取失败时，保底用环境变量/Secrets 里的 TICKERS
+            pass
+            
     # 1) 同步订阅
     subscribers = sync_subscribers_from_updates()
 
@@ -343,7 +419,7 @@ def main():
         summary = (
             "🎊 今日 MA60 趋势拐点\n"
             f"📈 由跌转涨: {len(up_symbols)} 支 ✨新增 {len(new_up)} \n"
-            f"📉 下跌拐点: {len(down_symbols)} 支 ✨新增 {len(new_dn)} \n"
+            f"📉 由涨转跌: {len(down_symbols)} 支 ✨新增 {len(new_dn)} \n"
             "------------"
         )
         for cid in recipients:
@@ -356,7 +432,7 @@ def main():
 
     # 4) 如有异常标的，简要汇报（不阻断主流程）
     if bad:
-        note = "⚠️ 以下标的数据异常，已跳过：\n" + ", ".join(bad[:50])
+        note = "以下标的数据异常 \n" + ", ".join(bad[:50])
         for cid in recipients:
             send_message(cid, note)
             time.sleep(0.05)
