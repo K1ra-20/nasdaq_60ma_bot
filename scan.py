@@ -214,12 +214,13 @@ def detect_turnup(df):
 
     if cond_prev_down and cond_recent:
         last = x.iloc[-1]
+        last_date = x.index[-1].date()  # ← 用索引取日期，彻底告别 't'
         return {
-            "date": last["t"].date(),
+            "date": last_date,
             "close": float(last["close"]),
             "sma60": float(last["sma60"]),
             "slope": float(last["slope"]),
-            "type": "up",
+            "type": "up", 
         }
     return None
 
@@ -252,8 +253,9 @@ def detect_turndown(df):
 
     if cond_prev_up and cond_recent:
         last = x.iloc[-1]
+        last_date = x.index[-1].date()  # ← 用索引取日期，彻底告别 't'
         return {
-            "date": last["t"].date(),
+            "date": last_date,
             "close": float(last["close"]),
             "sma60": float(last["sma60"]),
             "slope": float(last["slope"]),
