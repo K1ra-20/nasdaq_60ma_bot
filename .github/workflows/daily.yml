@@ -26,6 +26,7 @@ jobs:
 
       - name: Run scan
         env:
+          USE_SP500: "true"                # 开/关 S&P 500 自动名单
           FINNHUB_TOKEN: ${{ secrets.FINNHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
