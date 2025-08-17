@@ -1,4 +1,18 @@
 {
-"ups": [],
-"downs": []
+"ups": [
+"BDX",
+"MSI",
+"PEP",
+"TMO"
+],
+"downs": [
+"AIG",
+"MDLZ",
+"RSG",
+"SBAC",
+"V",
+"VRSK",
+"VRSN",
+"WRB"
+]
 }
