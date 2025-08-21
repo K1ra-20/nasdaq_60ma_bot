@@ -2,16 +2,15 @@
 "ups": [
 "BDX",
 "HUM",
-"MSI",
 "PEP",
 "TMO"
 ],
 "downs": [
 "MDLZ",
+"MOS",
 "PAYC",
 "SBAC",
 "VRSK",
-"VRSN",
 "WRB"
 ]
 }
