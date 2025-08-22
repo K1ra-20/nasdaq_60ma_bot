@@ -2,15 +2,15 @@
 "ups": [
 "BDX",
 "HUM",
-"PEP",
 "TMO"
 ],
 "downs": [
+"IBM",
+"MCK",
 "MDLZ",
 "MOS",
 "PAYC",
 "SBAC",
-"VRSK",
-"WRB"
+"VRSK"
 ]
 }
