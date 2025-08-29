@@ -3,19 +3,20 @@
 "AIZ",
 "BDX",
 "GPN",
-"HUM",
-"POOL"
+"HUM"
 ],
 "downs": [
 "AMT",
 "CME",
 "CRWD",
+"CTAS",
 "DE",
 "MCK",
 "NRG",
 "PAYC",
 "PM",
 "SBAC",
+"TDG",
 "VRSK"
 ]
 }
