@@ -1,17 +1,19 @@
 {
 "ups": [
-"BDX",
 "HUM",
 "OMC",
 "UNH"
 ],
 "downs": [
+"CAH",
 "CME",
 "CTAS",
+"DRI",
 "INTU",
 "MCK",
 "NRG",
 "PAYC",
-"TDG"
+"TDG",
+"TT"
 ]
 }
