@@ -2,8 +2,8 @@
 "ups": [
 "DECK",
 "DOC",
-"HUM",
 "OMC",
+"REGN",
 "UNH"
 ],
 "downs": [
@@ -11,9 +11,8 @@
 "CME",
 "CTAS",
 "DRI",
-"ES",
+"ICE",
 "INTU",
-"MCK",
 "PAYC",
 "TDG",
 "TT"
