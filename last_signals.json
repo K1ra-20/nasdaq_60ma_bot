@@ -1,17 +1,16 @@
 {
 "ups": [
+"CPB",
 "REGN",
 "UNH"
 ],
 "downs": [
 "AXON",
-"CAH",
 "CTAS",
 "DG",
 "DIS",
 "ICE",
 "INTU",
-"TDG",
 "TT"
 ]
 }
