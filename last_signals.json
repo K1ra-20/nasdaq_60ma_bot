@@ -1,15 +1,13 @@
 {
-"ups": [
-"CPB"
-],
+"ups": [],
 "downs": [
 "AXON",
 "DG",
 "DIS",
+"DLTR",
 "GEN",
 "ICE",
 "INTU",
-"NFLX",
-"TT"
+"NFLX"
 ]
 }
