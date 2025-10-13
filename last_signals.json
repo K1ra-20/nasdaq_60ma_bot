@@ -1,5 +1,7 @@
 {
-"ups": [],
+"ups": [
+"CNC"
+],
 "downs": [
 "BEN",
 "BKNG",
@@ -11,9 +13,9 @@
 "GEN",
 "HLT",
 "JBL",
+"KKR",
 "MCO",
 "MGM",
-"NFLX",
 "SNPS",
 "SPGI"
 ]
