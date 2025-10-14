@@ -1,6 +1,7 @@
 {
 "ups": [
-"CNC"
+"CNC",
+"K"
 ],
 "downs": [
 "BEN",
@@ -10,12 +11,14 @@
 "DLTR",
 "EMR",
 "FCX",
-"GEN",
+"HBAN",
 "HLT",
 "JBL",
 "KKR",
 "MCO",
 "MGM",
+"MTB",
+"RCL",
 "SNPS",
 "SPGI"
 ]
