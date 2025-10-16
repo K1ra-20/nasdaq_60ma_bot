@@ -1,7 +1,8 @@
 {
 "ups": [
 "CNC",
-"K"
+"K",
+"LLY"
 ],
 "downs": [
 "BA",
@@ -12,6 +13,7 @@
 "CTVA",
 "DLTR",
 "EMR",
+"EW",
 "FCX",
 "HBAN",
 "HLT",
@@ -20,6 +22,8 @@
 "MCO",
 "MGM",
 "MTB",
+"NWS",
+"NWSA",
 "RCL",
 "SNPS",
 "SPGI"
