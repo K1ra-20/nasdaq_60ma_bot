@@ -3,13 +3,12 @@
 "CNC",
 "ELV",
 "FICO",
-"K",
-"WAT"
+"K"
 ],
 "downs": [
 "BA",
 "BEN",
-"BKNG",
+"BX",
 "COIN",
 "CSGP",
 "EMR",
@@ -17,6 +16,7 @@
 "HBAN",
 "JBL",
 "KKR",
+"LIN",
 "MCO",
 "MGM",
 "MTB",
@@ -24,7 +24,6 @@
 "NWSA",
 "PNC",
 "RCL",
-"SPGI",
-"TFC"
+"TRMB"
 ]
 }
