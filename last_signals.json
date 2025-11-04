@@ -2,13 +2,13 @@
 "ups": [
 "CNC",
 "ELV",
-"OTIS",
-"WAT"
+"OTIS"
 ],
 "downs": [
 "AOS",
 "BX",
 "CBOE",
+"CDNS",
 "CSGP",
 "FAST",
 "GEV",
