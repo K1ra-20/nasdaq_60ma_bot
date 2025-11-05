@@ -1,18 +1,15 @@
 {
 "ups": [
-"CNC",
-"ELV",
-"OTIS"
+"CB",
+"ELV"
 ],
 "downs": [
 "AOS",
 "BX",
-"CBOE",
 "CDNS",
 "CSGP",
 "FAST",
 "GEV",
-"KKR",
 "MTCH",
 "NDAQ",
 "NWSA",
@@ -21,6 +18,7 @@
 "RJF",
 "RMD",
 "SCHW",
-"TRMB"
+"TRMB",
+"VST"
 ]
 }
