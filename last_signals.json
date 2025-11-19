@@ -1,12 +1,11 @@
 {
 "ups": [
+"CTRA",
 "VRTX"
 ],
 "downs": [
-"AOS",
 "AZO",
 "BLK",
-"BX",
 "CDNS",
 "DASH",
 "EBAY",
@@ -14,15 +13,17 @@
 "GEV",
 "GRMN",
 "LH",
+"LYV",
 "META",
 "MO",
 "NCLH",
 "NOC",
 "NVR",
+"ORCL",
 "PTC",
-"RF",
 "RMD",
 "VLTO",
-"VST"
+"VST",
+"XYZ"
 ]
 }
