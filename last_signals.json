@@ -1,9 +1,5 @@
 {
-"ups": [
-"CTRA",
-"KO",
-"VRTX"
-],
+"ups": [],
 "downs": [
 "ADM",
 "ALLE",
@@ -15,17 +11,16 @@
 "DHI",
 "EBAY",
 "ETN",
-"FITB",
 "GRMN",
 "HD",
 "HPE",
 "HUBB",
+"J",
 "LEN",
 "LH",
 "LOW",
 "LYV",
 "MHK",
-"MO",
 "MSFT",
 "NOC",
 "NTAP",
@@ -35,7 +30,6 @@
 "PNR",
 "SO",
 "UBER",
-"URI",
-"WSM"
+"URI"
 ]
 }
