@@ -1,14 +1,14 @@
 {
 "ups": [
 "ALGN",
-"COO"
+"COO",
+"TDG"
 ],
 "downs": [
 "ADM",
 "ALLE",
 "ANET",
 "APTV",
-"ETN",
 "J",
 "LEN",
 "MSFT",
@@ -17,7 +17,6 @@
 "PKG",
 "PNR",
 "PODD",
-"UBER",
-"URI"
+"UBER"
 ]
 }
