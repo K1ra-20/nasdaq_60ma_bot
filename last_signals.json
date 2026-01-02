@@ -1,24 +1,28 @@
 {
 "ups": [
 "ABNB",
-"ACN",
+"AMCR",
 "BALL",
 "CPAY",
 "DE",
 "GWW",
 "IFF",
+"KVUE",
 "LULU",
 "ODFL",
-"TAP",
-"V"
+"TAP"
 ],
 "downs": [
 "AEE",
 "BKR",
+"CMS",
 "DELL",
+"DGX",
 "EME",
 "IBKR",
+"MPC",
 "PSKY",
+"UNH",
 "WEC",
 "XYL"
 ]
