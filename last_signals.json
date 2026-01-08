@@ -1,6 +1,5 @@
 {
 "ups": [
-"ABNB",
 "AMCR",
 "BALL",
 "CPAY",
@@ -8,16 +7,17 @@
 "DE",
 "FDS",
 "GWW",
-"IFF",
 "LULU",
 "ODFL"
 ],
 "downs": [
 "AEE",
+"ATO",
 "BBY",
 "CMS",
 "DELL",
 "DGX",
+"ETR",
 "EVRG",
 "EXC",
 "FE",
@@ -25,8 +25,7 @@
 "LW",
 "MPC",
 "NI",
-"NSC",
-"PSKY",
+"SRE",
 "UNH",
 "WEC",
 "XEL"
