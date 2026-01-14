@@ -1,17 +1,13 @@
 {
 "ups": [
-"AMCR",
 "BALL",
 "CPAY",
 "CPT",
 "CTVA",
-"DE",
 "FDS",
-"ODFL",
-"TDG"
+"MAA"
 ],
 "downs": [
-"AEE",
 "ATO",
 "BBY",
 "DDOG",
@@ -25,7 +21,6 @@
 "LW",
 "MPC",
 "NI",
-"SRE",
 "UNH",
 "XEL"
 ]
