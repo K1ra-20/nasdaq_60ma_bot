@@ -1,7 +1,6 @@
 {
 "ups": [
 "COST",
-"CPT",
 "CTVA",
 "CZR",
 "HON",
@@ -9,10 +8,9 @@
 "KMX",
 "LYB",
 "MAA",
+"MKTX",
 "PM",
 "UDR"
 ],
-"downs": [
-"DDOG"
-]
+"downs": []
 }
