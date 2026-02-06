@@ -1,19 +1,16 @@
 {
 "ups": [
 "COST",
-"CTVA",
 "CZR",
-"HON",
 "ICE",
 "KMX",
 "LYB",
 "MAA",
-"MOH",
 "PM",
 "UDR"
 ],
 "downs": [
-"PLTR",
+"NVDA",
 "QCOM",
 "TEL"
 ]
