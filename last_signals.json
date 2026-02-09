@@ -2,16 +2,16 @@
 "ups": [
 "COST",
 "CZR",
-"ICE",
+"EOG",
 "KMX",
 "LYB",
-"MAA",
 "PM",
 "UDR"
 ],
 "downs": [
 "NVDA",
 "QCOM",
-"TEL"
+"TEL",
+"TSLA"
 ]
 }
