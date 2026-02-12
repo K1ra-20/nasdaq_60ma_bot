@@ -1,13 +1,16 @@
 {
 "ups": [
+"CMG",
 "COST",
-"CZR",
 "EOG",
 "EQR",
+"EXR",
 "KMX",
 "LYB",
+"MOS",
 "RCL",
-"RSG"
+"RSG",
+"VZ"
 ],
 "downs": [
 "AMD",
