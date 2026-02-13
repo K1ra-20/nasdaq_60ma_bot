@@ -1,7 +1,7 @@
 {
 "ups": [
+"CARR",
 "CMG",
-"COST",
 "EOG",
 "EQR",
 "EXR",
@@ -10,11 +10,14 @@
 "MOS",
 "RCL",
 "RSG",
+"T",
 "VZ"
 ],
 "downs": [
 "AMD",
-"QCOM",
-"TEL"
+"FSLR",
+"LVS",
+"MTD",
+"QCOM"
 ]
 }
