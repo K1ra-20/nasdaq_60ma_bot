@@ -1,5 +1,6 @@
 {
 "ups": [
+"BLDR",
 "CARR",
 "CMG",
 "EOG",
@@ -7,6 +8,7 @@
 "EXR",
 "KMX",
 "LYB",
+"MDLZ",
 "MOS",
 "RCL",
 "RSG",
@@ -16,6 +18,7 @@
 "downs": [
 "AMD",
 "FSLR",
+"IDXX",
 "LVS",
 "MTD",
 "QCOM"
