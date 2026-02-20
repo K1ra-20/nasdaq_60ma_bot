@@ -2,6 +2,7 @@
 "ups": [
 "BLDR",
 "CARR",
+"CHTR",
 "CMG",
 "DVA",
 "EOG",
@@ -14,12 +15,12 @@
 "VZ"
 ],
 "downs": [
-"AMD",
 "FSLR",
 "IBM",
 "IDXX",
 "LVS",
 "MTD",
-"QCOM"
+"QCOM",
+"TMO"
 ]
 }
