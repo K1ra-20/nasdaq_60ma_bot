@@ -1,13 +1,11 @@
 {
 "ups": [
-"BLDR",
 "CARR",
 "CHTR",
 "CMG",
 "DLR",
 "DVA",
 "EOG",
-"EQR",
 "MDLZ",
 "MOS",
 "RCL",
@@ -22,7 +20,6 @@
 "IDXX",
 "LVS",
 "MTD",
-"QCOM",
 "STE",
 "TMO"
 ]
