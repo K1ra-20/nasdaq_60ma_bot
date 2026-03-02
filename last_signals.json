@@ -1,17 +1,18 @@
 {
 "ups": [
+"AMT",
 "CARR",
 "CHTR",
 "CMG",
 "DLR",
 "DVA",
-"EOG",
 "MDLZ",
 "MOS",
 "RCL",
 "T"
 ],
 "downs": [
+"AAPL",
 "DHR",
 "EPAM",
 "EXPE",
