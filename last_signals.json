@@ -1,4 +1,29 @@
 {
-"ups": [],
-"downs": []
+"ups": [
+"AMT",
+"CARR",
+"CHTR",
+"CMG",
+"DLR",
+"DVA",
+"MDLZ",
+"MOS",
+"RCL",
+"T",
+"TMUS",
+"VICI"
+],
+"downs": [
+"AAPL",
+"DHR",
+"EPAM",
+"EXPE",
+"FOX",
+"FOXA",
+"FSLR",
+"IDXX",
+"MTD",
+"STE",
+"TMO"
+]
 }
