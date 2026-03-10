@@ -1,24 +1,22 @@
 {
 "ups": [
 "AMT",
-"CARR",
 "CHTR",
-"CMG",
 "DVA",
 "MDLZ",
-"MOS",
 "T",
 "TMUS",
 "VICI"
 ],
 "downs": [
+"BAC",
 "DHR",
 "EPAM",
 "EXPE",
 "FOX",
 "FOXA",
+"GOOG",
 "MMM",
-"MTD",
 "STE",
 "TECH",
 "TMO"
