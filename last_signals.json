@@ -1,7 +1,6 @@
 {
 "ups": [
 "CHTR",
-"DVA",
 "TMUS"
 ],
 "downs": [
@@ -13,6 +12,7 @@
 "FOX",
 "FOXA",
 "GOOG",
+"MS",
 "TECH",
 "TMO"
 ]
