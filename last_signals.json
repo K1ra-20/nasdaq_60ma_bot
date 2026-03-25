@@ -1,13 +1,12 @@
 {
-"ups": [
-"TMUS"
-],
+"ups": [],
 "downs": [
 "C",
+"CNC",
 "ELV",
 "GEHC",
 "MS",
-"TECH",
+"USB",
 "WBD"
 ]
 }
